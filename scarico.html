@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Scarico Prodotti Magazzino</title>
+  <title>Scarico Prodotti Magazzino - Debug</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
@@ -18,11 +18,7 @@
     async function caricaProdotti() {
       const response = await fetch("https://script.google.com/macros/s/AKfycbw0SVbhLFii6LeB5AcYPW1uFcouwOD0xN-AdK5TfCY1nuBbEKangalc3rOXFOvr8TO4/exec");
       prodotti = await response.json();
-      console.log("Prodotti caricati:", prodotti);
-
-      const nomeProdottoInput = document.getElementById("nome_prodotto");
-      nomeProdottoInput.addEventListener("input", aggiornaSuggerimenti);
-
+      document.getElementById("nome_prodotto").addEventListener("input", aggiornaSuggerimenti);
       controllaScorte();
     }
 
@@ -31,8 +27,7 @@
       const datalist = document.getElementById("suggerimenti");
       datalist.innerHTML = "";
 
-      const filtrati = prodotti.filter(p => p["Nome Prodotto"].toLowerCase().includes(input));
-      filtrati.forEach(p => {
+      prodotti.filter(p => p["Nome Prodotto"].toLowerCase().includes(input)).forEach(p => {
         const option = document.createElement("option");
         option.value = p["Nome Prodotto"];
         datalist.appendChild(option);
@@ -52,8 +47,10 @@
 
     function inserisciCodice(event) {
       if (event.key === "Enter") {
-        const codice = document.getElementById("codice_barre").value;
-        const prodotto = prodotti.find(p => p["Codice a Barre"] === codice);
+        const codice = document.getElementById("codice_barre").value.trim();
+        const prodotto = prodotti.find(p => p["Codice a Barre"].toString().trim() === codice);
+        console.log("Codice inserito:", codice);
+        console.log("Prodotto trovato:", prodotto);
         if (prodotto) {
           document.getElementById("nome_prodotto").value = prodotto["Nome Prodotto"];
           document.getElementById("prezzo_vendita").value = prodotto["Prezzo Vendita"];
@@ -75,7 +72,10 @@
 
     async function scaricaProdotto(prodotto) {
       const codiceBarre = prodotto["Codice a Barre"];
+      const prezzoVendita = parseFloat(prodotto["Prezzo Vendita"]);
       const data = { codiceBarre, quantita: 1 };
+
+      console.log("📤 PRIMA DEL FETCH: invio questi dati", data);
 
       const response = await fetch("https://script.google.com/macros/s/AKfycbw0SVbhLFii6LeB5AcYPW1uFcouwOD0xN-AdK5TfCY1nuBbEKangalc3rOXFOvr8TO4/exec", {
         method: "PUT",
@@ -84,6 +84,8 @@
       });
 
       const result = await response.text();
+      console.log("📥 DOPO IL FETCH: risposta server", result);
+
       if (!result.includes("Scarico completato")) {
         alert("Errore durante lo scarico: " + result);
         return;
@@ -93,16 +95,11 @@
         codiceBarre,
         nome: prodotto["Nome Prodotto"],
         quantita: 1,
-        prezzoVendita: parseFloat(prodotto["Prezzo Vendita"])
+        prezzoVendita
       });
 
       aggiornaTabellaScarichi();
-      document.getElementById("codice_barre").value = "";
-      document.getElementById("nome_prodotto").value = "";
-      document.getElementById("prezzo_vendita").value = "";
-      document.getElementById("dettagli").innerHTML = "";
-
-      caricaProdotti();
+      mostraDettagli(prodotto);
     }
 
     function aggiornaTabellaScarichi() {
@@ -130,11 +127,9 @@
     function controllaScorte() {
       const alertDiv = document.getElementById("alert");
       alertDiv.innerHTML = "";
-
       prodotti.forEach(p => {
         if (parseInt(p["Quantità"]) <= 1) {
-          const messaggio = `<p>❗ Attenzione: prodotto <strong>${p["Nome Prodotto"]}</strong> in esaurimento!</p>`;
-          alertDiv.innerHTML += messaggio;
+          alertDiv.innerHTML += `<p>❗ Attenzione: prodotto <strong>${p["Nome Prodotto"]}</strong> in esaurimento!</p>`;
         }
       });
     }
@@ -142,7 +137,6 @@
     window.onload = caricaProdotti;
   </script>
 </head>
-
 <body>
   <h1>Scarico Prodotti Magazzino</h1>
 
@@ -172,8 +166,6 @@
     </thead>
     <tbody></tbody>
   </table>
-
   <h3 id="totale_giornata"></h3>
 </body>
 </html>
-
