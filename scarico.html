@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Scarico Prodotti Magazzino</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    #alert { color: red; font-weight: bold; margin-top: 20px; }
+    input, select, button { margin: 5px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  </style>
+  <script>
+    let prodotti = [];
+    let scarichi = [];
+
+    async function caricaProdotti() {
+      const response = await fetch("https://script.google.com/macros/s/AKfycbw0SVbhLFii6LeB5AcYPW1uFcouwOD0xN-AdK5TfCY1nuBbEKangalc3rOXFOvr8TO4/exec");
+      prodotti = await response.json();
+      console.log("Prodotti caricati:", prodotti);
+
+      const nomeProdottoInput = document.getElementById("nome_prodotto");
+      nomeProdottoInput.addEventListener("input", aggiornaSuggerimenti);
+
+      controllaScorte();
+    }
+
+    function aggiornaSuggerimenti() {
+      const input = document.getElementById("nome_prodotto").value.toLowerCase();
+      const datalist = document.getElementById("suggerimenti");
+      datalist.innerHTML = "";
+
+      const filtrati = prodotti.filter(p => p["Nome Prodotto"].toLowerCase().includes(input));
+      filtrati.forEach(p => {
+        const option = document.createElement("option");
+        option.value = p["Nome Prodotto"];
+        datalist.appendChild(option);
+      });
+    }
+
+    function selezionaProdotto() {
+      const nome = document.getElementById("nome_prodotto").value;
+      const prodotto = prodotti.find(p => p["Nome Prodotto"] === nome);
+      if (prodotto) {
+        document.getElementById("codice_barre").value = prodotto["Codice a Barre"];
+        document.getElementById("prezzo_vendita").value = prodotto["Prezzo Vendita"];
+        mostraDettagli(prodotto);
+        scaricaProdotto(prodotto);
+      }
+    }
+
+    function inserisciCodice(event) {
+      if (event.key === "Enter") {
+        const codice = document.getElementById("codice_barre").value;
+        const prodotto = prodotti.find(p => p["Codice a Barre"] === codice);
+        if (prodotto) {
+          document.getElementById("nome_prodotto").value = prodotto["Nome Prodotto"];
+          document.getElementById("prezzo_vendita").value = prodotto["Prezzo Vendita"];
+          mostraDettagli(prodotto);
+          scaricaProdotto(prodotto);
+        } else {
+          alert("Prodotto non trovato");
+        }
+      }
+    }
+
+    function mostraDettagli(prodotto) {
+      document.getElementById("dettagli").innerHTML = `
+        <p><strong>Codice Interno:</strong> ${prodotto["Codice Interno"]}</p>
+        <p><strong>Tipo:</strong> ${prodotto["Tipo"]}</p>
+        <p><strong>Quantità disponibile:</strong> ${prodotto["Quantità"]}</p>
+      `;
+    }
+
+    async function scaricaProdotto(prodotto) {
+      const codiceBarre = prodotto["Codice a Barre"];
+      const data = { codiceBarre, quantita: 1 };
+
+      const response = await fetch("https://script.google.com/macros/s/AKfycbw0SVbhLFii6LeB5AcYPW1uFcouwOD0xN-AdK5TfCY1nuBbEKangalc3rOXFOvr8TO4/exec", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.text();
+      if (!result.includes("Scarico completato")) {
+        alert("Errore durante lo scarico: " + result);
+        return;
+      }
+
+      scarichi.push({
+        codiceBarre,
+        nome: prodotto["Nome Prodotto"],
+        quantita: 1,
+        prezzoVendita: parseFloat(prodotto["Prezzo Vendita"])
+      });
+
+      aggiornaTabellaScarichi();
+      document.getElementById("codice_barre").value = "";
+      document.getElementById("nome_prodotto").value = "";
+      document.getElementById("prezzo_vendita").value = "";
+      document.getElementById("dettagli").innerHTML = "";
+
+      caricaProdotti();
+    }
+
+    function aggiornaTabellaScarichi() {
+      const tbody = document.querySelector("#tabella_scarichi tbody");
+      tbody.innerHTML = "";
+
+      let totale = 0;
+      scarichi.forEach(item => {
+        const subtotale = item.quantita * item.prezzoVendita;
+        totale += subtotale;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${item.codiceBarre}</td>
+          <td>${item.nome}</td>
+          <td>${item.quantita}</td>
+          <td>${item.prezzoVendita.toFixed(2)} €</td>
+          <td>${subtotale.toFixed(2)} €</td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      document.getElementById("totale_giornata").innerText = `Totale vendite: ${totale.toFixed(2)} €`;
+    }
+
+    function controllaScorte() {
+      const alertDiv = document.getElementById("alert");
+      alertDiv.innerHTML = "";
+
+      prodotti.forEach(p => {
+        if (parseInt(p["Quantità"]) <= 1) {
+          const messaggio = `<p>❗ Attenzione: prodotto <strong>${p["Nome Prodotto"]}</strong> in esaurimento!</p>`;
+          alertDiv.innerHTML += messaggio;
+        }
+      });
+    }
+
+    window.onload = caricaProdotti;
+  </script>
+</head>
+
+<body>
+  <h1>Scarico Prodotti Magazzino</h1>
+
+  <label>Scansiona o inserisci Codice a Barre:</label><br>
+  <input type="text" id="codice_barre" onkeypress="inserisciCodice(event)" placeholder="Codice a barre"><br><br>
+
+  <label>Oppure seleziona Nome Prodotto:</label><br>
+  <input list="suggerimenti" id="nome_prodotto" onchange="selezionaProdotto()" placeholder="Nome prodotto">
+  <datalist id="suggerimenti"></datalist><br><br>
+
+  <label>Prezzo di Vendita (€):</label><br>
+  <input type="number" id="prezzo_vendita" step="0.01" readonly><br><br>
+
+  <div id="dettagli"></div>
+  <div id="alert"></div>
+
+  <h2>Scarichi Giornalieri</h2>
+  <table id="tabella_scarichi">
+    <thead>
+      <tr>
+        <th>Codice a Barre</th>
+        <th>Nome Prodotto</th>
+        <th>Quantità</th>
+        <th>Prezzo Vendita</th>
+        <th>Totale</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h3 id="totale_giornata"></h3>
+</body>
+</html>
+
